@@ -6,8 +6,8 @@ require('dotenv').config();
 const users = [
     {
         name: 'Admin User',
-        email: 'admin@eduhash.com',
-        password: 'NistSecurePassword@123', // 20 chars
+        email: 'kokulkrishnan07+admin@gmail.com', // Uses alias so you get email, but unique in DB
+        password: 'NistSecurePassword@123',
         role: 'admin'
     },
     {
@@ -19,7 +19,7 @@ const users = [
     },
     {
         name: 'Audit Officer',
-        email: 'auditor@eduhash.com',
+        email: 'kokulkrishnan07+auditor@gmail.com', // Uses alias
         password: 'NistSecurePassword@123',
         role: 'auditor'
     }

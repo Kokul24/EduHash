@@ -14,6 +14,15 @@ const QRCode = require('qrcode');
 // Prompt says: "step 6... Output: Use jspdf". I will stick to frontend JS PDF generation if possible, BUT the signature creation happens on server.
 // So flow: Server returns { signature, qrCodeDataUrl }. Frontend puts this into PDF.
 
+// --- Email Transporter Configuration ---
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
 const User = require('./models/User');
 const Fee = require('./models/Fee');
 const Transaction = require('./models/Transaction');
@@ -121,10 +130,61 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user) return res.status(400).json({ message: 'User not found' });
 
         if (await bcrypt.compare(password, user.password)) {
-            const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET);
-            res.json({ token, role: user.role, name: user.name, id: user._id });
+            // CREDENTIALS VALID - INITIATE 2FA
+
+            // Generate 6 digit OTP
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+            // Save to User Model (Expires in 5 mins)
+            user.otp = otp;
+            user.otpExpires = Date.now() + 5 * 60 * 1000;
+            await user.save();
+
+            // Send Email with OTP
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: user.email,
+                subject: 'EduHash Security Verification Code',
+                text: `Your One-Time Password (OTP) for login is: ${otp}\n\nThis code expires in 5 minutes.\nIf you did not request this, please ignore.`
+            };
+
+            await transporter.sendMail(mailOptions);
+            console.log(`[AUTH 2FA] OTP sent to: ${user.email}`); // Keep log for debug but don't show code
+
+            res.json({
+                requireOtp: true,
+                message: 'Credentials valid. Please enter the OTP sent to your email.',
+                email: user.email // Send back to confirm where it went
+            });
         } else {
             res.status(401).json({ message: 'Invalid credentials' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) return res.status(400).json({ message: 'User not found' });
+
+        // Check if OTP matches and is not expired
+        if (user.otp === otp && user.otpExpires > Date.now()) {
+
+            // CLEAR OTP after use
+            user.otp = undefined;
+            user.otpExpires = undefined;
+            await user.save();
+
+            // ISSUE TOKEN
+            const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET);
+            res.json({ token, role: user.role, name: user.name, id: user._id });
+
+        } else {
+            res.status(400).json({ message: 'Invalid or Expired OTP' });
         }
     } catch (error) {
         res.status(500).json({ error: error.message });
