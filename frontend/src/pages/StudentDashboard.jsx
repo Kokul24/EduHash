@@ -353,7 +353,7 @@ const PaymentModal = ({ fee, onClose, onSuccess }) => {
         // Digital Signature Section - More Professional
         doc.setFontSize(10);
         doc.setTextColor(60, 60, 60);
-        doc.text("🔒 Digital Signature (SHA-256 with RSA):", 20, 85);
+        doc.text("🔒 Digital Signature:", 20, 85);
 
         doc.setFontSize(7);
         doc.setFont("courier"); // Monospace font for signature
@@ -412,7 +412,7 @@ const PaymentModal = ({ fee, onClose, onSuccess }) => {
                             </div>
                             <div>
                                 <h3 className="text-2xl font-bold">Secure Payment</h3>
-                                <p className="text-sm text-gray-400">AES-256 Encrypted</p>
+
                             </div>
                         </div>
 
@@ -465,7 +465,7 @@ const PaymentModal = ({ fee, onClose, onSuccess }) => {
 
                         <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-xs p-3 rounded-lg flex items-start gap-2">
                             <Lock size={16} className="mt-0.5 flex-shrink-0" />
-                            <span>Your data is encrypted using AES-256 before transmission and storage.</span>
+
                         </div>
 
                         <motion.button

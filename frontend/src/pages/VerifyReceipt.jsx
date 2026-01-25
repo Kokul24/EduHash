@@ -55,6 +55,15 @@ const VerifyReceipt = () => {
                     continue;
                 }
 
+                // 1. Extract Text Content from the page for Anti-Tamper Check
+                let pageText = '';
+                try {
+                    const textContent = await page.getTextContent();
+                    pageText = textContent.items.map(item => item.str).join(' ');
+                } catch (textErr) {
+                    console.warn("Could not extract text for tamper check:", textErr);
+                }
+
                 // Try multiple scales if the first one fails
                 const attempts = [2.0, 3.0, 1.5];
 
@@ -65,6 +74,10 @@ const VerifyReceipt = () => {
                         const viewport = page.getViewport({ scale });
                         const canvas = document.createElement('canvas');
                         const context = canvas.getContext('2d', { willReadFrequently: true });
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
 
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
@@ -73,10 +86,7 @@ const VerifyReceipt = () => {
                         context.fillStyle = 'white';
                         context.fillRect(0, 0, canvas.width, canvas.height);
 
-                        await page.render({
-                            canvasContext: context,
-                            viewport: viewport
-                        }).promise;
+                        await page.render(renderContext).promise;
 
                         const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
                         const code = jsQR(imageData.data, imageData.width, imageData.height, {
@@ -85,6 +95,66 @@ const VerifyReceipt = () => {
 
                         if (code) {
                             console.log('QR Found:', code.data);
+
+                            // --- TAMPER DETECTION LOGIC ---
+                            try {
+                                const qrJson = JSON.parse(code.data);
+                                // The data string is: StudentID|StudentName|Amount|Date|TransactionID
+                                const parts = qrJson.data.split('|');
+
+                                if (parts.length >= 3) {
+                                    const qrName = parts[1];
+                                    const qrAmount = parts[2];
+                                    const qrDateRaw = parts[3];
+                                    const qrTxId = parts[4];
+
+                                    console.log("Checking Tamper:", { qrName, qrAmount, qrDateRaw, qrTxId });
+
+                                    if (!pageText.includes(qrName)) {
+                                        toast.error(`⚠️ TAMPER DETECTED: Name '${qrName}' not found on receipt text!`);
+                                        throw new Error("Tampered Receipt Detected: Visual name does not match digital record.");
+                                    }
+
+                                    // Strict Amount Check (Prevents 12000 matching 120000)
+                                    // We use Regex to look for the amount NOT followed by another digit
+                                    // We also stripping commas from page text to handle "12,000" vs "12000"
+                                    const cleanPageText = pageText.replace(/,/g, '');
+                                    const amountRegex = new RegExp(`${qrAmount}(?!\\d)`); // Lookahead: Next char must NOT be a digit
+
+                                    if (!amountRegex.test(cleanPageText)) {
+                                        toast.error(`⚠️ TAMPER DETECTED: Amount '${qrAmount}' mismatch!`);
+                                        throw new Error(`Tampered Receipt Detected: Visual amount (${cleanPageText.match(/\d+/g)?.find(n => n.includes(qrAmount)) || 'modified'}) does not match digital record (${qrAmount}).`);
+                                    }
+
+                                    // Date Check (Formatted)
+                                    // We convert the raw date from QR to the localized string used on PDF
+                                    const formattedDate = new Date(qrDateRaw).toLocaleString();
+                                    // Remove commas for looser matching just in case extraction logic is weird
+                                    // But usually includes works fine if locale matches.
+                                    if (!pageText.includes(formattedDate)) {
+                                        // Fallback: Try just the date part if time caused mismatch
+                                        const justDate = new Date(qrDateRaw).toLocaleDateString();
+                                        if (!pageText.includes(justDate)) {
+                                            toast.error(`⚠️ TAMPER DETECTED: Date mismatch!`);
+                                            throw new Error("Tampered Receipt Detected: Visual date does not match digital record.");
+                                        }
+                                    }
+
+                                    // Transaction ID Check
+                                    if (!pageText.includes(qrTxId)) {
+                                        toast.error(`⚠️ TAMPER DETECTED: Transaction ID mismatch!`);
+                                        throw new Error("Tampered Receipt Detected: Visual Transaction ID does not match digital record.");
+                                    }
+                                }
+                            } catch (tamperErr) {
+                                if (tamperErr.message.includes("Tampered")) {
+                                    throw tamperErr; // Propagate the specific tamper error
+                                }
+                                // Ignore JSON parse errors if format is different (legacy receipts)
+                                console.log("Skipping tamper check (legacy format or parse error)");
+                            }
+                            // -----------------------------
+
                             foundCode = code.data;
                         }
 
@@ -92,6 +162,8 @@ const VerifyReceipt = () => {
                         canvas.width = 0;
                         canvas.height = 0;
                     } catch (renderError) {
+                        // Re-throw if it's our tamper error
+                        if (renderError.message.includes("Tampered")) throw renderError;
                         console.warn(`Render error on p${pageNum} s${scale}:`, renderError);
                     }
                 }

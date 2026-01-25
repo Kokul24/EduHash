@@ -328,20 +328,39 @@ app.post('/api/verify-receipt', async (req, res) => {
 
         if (isVerified) {
             // Parse the verified data to show what was authenticated
-            const parts = originalData.split('|');
-            const verifiedData = {
-                studentId: parts[0],
-                studentName: parts[1],
-                amount: parts[2],
-                date: parts[3],
-                transactionId: parts[4]
-            };
+            let verifiedData = {};
+
+            if (originalData.includes('|')) {
+                // V2 Format (Secure Tamper Proof)
+                const parts = originalData.split('|');
+                verifiedData = {
+                    studentId: parts[0],
+                    studentName: parts[1],
+                    amount: parts[2],
+                    date: parts[3],
+                    transactionId: parts[4],
+                    version: 'v2'
+                };
+            } else {
+                // Legacy Format (Backward Compatibility)
+                const parts = originalData.split('-');
+                verifiedData = {
+                    studentId: parts[0],
+                    amount: parts[1],
+                    transactionId: parts[parts.length - 1],
+                    studentName: "(Legacy Receipt)",
+                    date: "Legacy Date",
+                    version: 'v1'
+                };
+            }
 
             res.json({
                 valid: true,
                 message: '✅ Verified Authentic - Trusted Source',
                 verifiedData: verifiedData,
-                note: 'All fields in the receipt are cryptographically verified and untampered.'
+                note: verifiedData.version === 'v2'
+                    ? 'Full cryptographic verification active.'
+                    : 'Legacy receipt verified (limited detail).'
             });
         } else {
             res.json({ valid: false, message: '❌ Tampered / Invalid Receipt' });
