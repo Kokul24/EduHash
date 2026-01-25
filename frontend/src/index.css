@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-[#0b0c15] text-white font-sans antialiased;
+}
+
+.card-gradient {
+  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+}
+
+.btn-primary {
+  @apply px-4 py-2 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.glass-panel {
+  @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl;
+}
