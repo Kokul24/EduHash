@@ -52,12 +52,26 @@ const AuditorDashboard = () => {
     };
 
     // Custom Tooltip
-    const CustomTooltip = ({ active, payload, label }) => {
+    // Tooltip for Revenue (Currency)
+    const CurrencyTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
                 <div className="bg-gray-900/95 border border-gray-700 rounded-lg p-3 shadow-xl">
                     <p className="text-gray-300 font-medium">{label || payload[0].name}</p>
                     <p className="text-emerald-400 font-bold">₹{payload[0].value.toLocaleString()}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    // Tooltip for Counts (Status)
+    const CountTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-gray-900/95 border border-gray-700 rounded-lg p-3 shadow-xl">
+                    <p className="text-gray-300 font-medium">{payload[0].name}</p>
+                    <p className="text-emerald-400 font-bold">{payload[0].value} Transactions</p>
                 </div>
             );
         }
@@ -185,8 +199,8 @@ const AuditorDashboard = () => {
                                         <div className="flex justify-between text-gray-500 text-xs mt-2">
                                             <span>{t.studentName}</span>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.status === 'Completed'
-                                                    ? 'bg-green-500/20 text-green-400'
-                                                    : 'bg-amber-500/20 text-amber-400'
+                                                ? 'bg-green-500/20 text-green-400'
+                                                : 'bg-amber-500/20 text-amber-400'
                                                 }`}>
                                                 {t.status}
                                             </span>
@@ -237,7 +251,7 @@ const AuditorDashboard = () => {
                                                     />
                                                 ))}
                                             </Pie>
-                                            <Tooltip content={<CustomTooltip />} />
+                                            <Tooltip content={<CountTooltip />} />
                                             <Legend
                                                 verticalAlign="bottom"
                                                 height={36}
@@ -287,7 +301,7 @@ const AuditorDashboard = () => {
                                                 axisLine={{ stroke: '#374151' }}
                                                 tickFormatter={(value) => `₹${value.toLocaleString()}`}
                                             />
-                                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
+                                            <Tooltip content={<CurrencyTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
                                             <Bar
                                                 dataKey="value"
                                                 fill="url(#barGradient)"

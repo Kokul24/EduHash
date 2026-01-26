@@ -308,11 +308,15 @@ app.post('/api/pay/initiate', authenticateToken, async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         otpStore[transaction._id] = otp;
 
-        console.log(`[MOCK EMAIL] To: ${req.user.email} | OTP: ${otp}`);
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: req.user.email,
+            subject: 'EduHash Payment Verification Code',
+            text: `Your One-Time Password (OTP) for payment confirmation is: ${otp}\n\nAmount: Rs. ${amount}\n\nThis code is valid for this transaction only.`
+        };
 
-        // Mock Nodemailer
-        // const transporter = nodemailer.createTransport({...});
-        // await transporter.sendMail({...});
+        await transporter.sendMail(mailOptions);
+        console.log(`[PAYMENT OTP] Sent to: ${req.user.email}`);
 
         res.json({ transactionId: transaction._id, message: 'OTP Sent' });
     } catch (error) {
