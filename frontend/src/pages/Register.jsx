@@ -26,13 +26,9 @@ const Register = () => {
                     <input className="w-full bg-[#0f172a] border border-gray-700 rounded px-4 py-3" placeholder="Password" type="password" onChange={e => setFormData({ ...formData, password: e.target.value })} />
                     <input className="w-full bg-[#0f172a] border border-gray-700 rounded px-4 py-3" placeholder="Student ID (Optional)" onChange={e => setFormData({ ...formData, studentId: e.target.value })} />
 
-                    <div className="flex gap-4">
-                        <label className="flex items-center gap-2">
-                            <input type="radio" name="role" value="student" checked={formData.role === 'student'} onChange={e => setFormData({ ...formData, role: 'student' })} /> Student
-                        </label>
-                        <label className="flex items-center gap-2">
-                            <input type="radio" name="role" value="auditor" checked={formData.role === 'auditor'} onChange={e => setFormData({ ...formData, role: 'auditor' })} /> Auditor
-                        </label>
+                    {/* Role selection removed - Defaults to Student */}
+                    <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded text-sm text-blue-300">
+                        <p>ℹ️ Creating a Student Account</p>
                     </div>
 
                     <button className="w-full py-3 rounded bg-blue-600 hover:bg-blue-500 font-bold">Register</button>

@@ -16,12 +16,6 @@ const users = [
         password: 'NistSecurePassword@123',
         role: 'student',
         studentId: '2021CS123'
-    },
-    {
-        name: 'Audit Officer',
-        email: 'kokulkrishnan07+auditor@gmail.com', // Uses alias
-        password: 'NistSecurePassword@123',
-        role: 'auditor'
     }
 ];
 

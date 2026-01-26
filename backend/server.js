@@ -191,6 +191,52 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     }
 });
 
+// Admin Route: Create Auditor
+app.post('/api/admin/create-auditor', authenticateToken, async (req, res) => {
+    // 1. Authorization Check
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied: Admins only' });
+
+    try {
+        const { name, email } = req.body;
+
+        // 2. Check overlap
+        const existing = await User.findOne({ email });
+        if (existing) return res.status(400).json({ message: 'User already exists with this email' });
+
+        // 3. Generate Strong Password
+        const generatedPassword = crypto.randomBytes(8).toString('hex') + '!Aa1'; // e.g. "a3f5b2c1!Aa1"
+
+        // 4. Hash & Save
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(generatedPassword, salt);
+
+        const newAuditor = new User({
+            name,
+            email,
+            password: hashedPassword,
+            role: 'auditor'
+        });
+        await newAuditor.save();
+
+        // 5. Email Credentials
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'EduHash Auditor Access Credentials',
+            text: `Welcome to EduHash Audit Team.\n\nYour account has been created by the Administrator.\n\nLogin Credentials:\nEmail: ${email}\nPassword: ${generatedPassword}\n\nPlease login and change your password immediately.`
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`[ADMIN] Created Auditor: ${email} | Sent credentials via email`);
+
+        res.status(201).json({ message: `Auditor ${name} created and credentials sent to ${email}` });
+
+    } catch (error) {
+        console.error("Create Auditor Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 2. Fees (Admin Create, Student Read)
 app.get('/api/fees', authenticateToken, async (req, res) => {
     try {
