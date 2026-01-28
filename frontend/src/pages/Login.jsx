@@ -2,13 +2,14 @@ import { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ShieldCheck, Lock, Fingerprint, Terminal } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Lock, Fingerprint, Terminal, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [otp, setOtp] = useState('');
     const [is2FA, setIs2FA] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
@@ -155,14 +156,23 @@ const Login = () => {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-cyan-300/80 mb-2">Password</label>
-                                            <input
-                                                type="password"
-                                                className="w-full bg-[#030712] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                placeholder="••••••••••••"
-                                                required
-                                            />
+                                            <div className="relative">
+                                                <input
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    className="w-full bg-[#030712] border border-cyan-500/30 rounded-xl px-4 py-3.5 pr-12 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all"
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    placeholder="••••••••••••"
+                                                    required
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-400/60 hover:text-cyan-400 transition-colors"
+                                                >
+                                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <label className="flex items-center gap-2 cursor-pointer group">

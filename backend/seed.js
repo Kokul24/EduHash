@@ -39,14 +39,8 @@ const seedDB = async () => {
         console.log(`   Email: ${adminUser.email}`);
         console.log('   Pass:  NistSecurePassword@123');
 
-        // 4. Create Sample Fee Data (Optional, but helpful for dashboard)
-        await Fee.create([
-            { title: 'Semester 6 Tuition', amount: 45000, category: 'Tuition', description: 'Regular semester fee' },
-            { title: 'Exam Fee - Finals', amount: 2500, category: 'Exam', description: 'End semester examination fee' },
-            { title: 'Lab Maintenance', amount: 5000, category: 'Laboratory', description: 'Computer lab breakage and maintenance' }
-        ]);
 
-        console.log('✅ Sample Fees Created.');
+
 
         process.exit();
     } catch (err) {

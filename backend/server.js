@@ -180,8 +180,20 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             await user.save();
 
             // ISSUE TOKEN
-            const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET);
-            res.json({ token, role: user.role, name: user.name, id: user._id });
+            const token = jwt.sign({
+                id: user._id,
+                role: user.role,
+                name: user.name,
+                studentId: user.studentId
+            }, process.env.JWT_SECRET);
+
+            res.json({
+                token,
+                role: user.role,
+                name: user.name,
+                id: user._id,
+                studentId: user.studentId
+            });
 
         } else {
             res.status(400).json({ message: 'Invalid or Expired OTP' });
@@ -479,6 +491,16 @@ app.post('/api/verify-receipt', async (req, res) => {
         console.error('Verification Error:', error);
         res.json({ valid: false, message: '❌ Verification Failed: ' + error.message });
     }
+});
+
+// 6. Key Exchange / Distribution Endpoint (Rubric Component 3)
+// Allows external verifiers to fetch the Public Key to verify signatures locally.
+app.get('/api/auth/public-key', (req, res) => {
+    res.json({
+        algorithm: 'RSA',
+        format: 'PEM',
+        publicKey: PUBLIC_KEY
+    });
 });
 
 // Start Server
