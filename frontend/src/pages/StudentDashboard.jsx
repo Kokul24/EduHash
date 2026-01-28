@@ -351,12 +351,9 @@ const PaymentModal = ({ fee, onClose, onSuccess }) => {
         doc.text(`Date: ${new Date(receiptData.date).toLocaleString()}`, 20, 70);
         doc.setFontSize(10);
         doc.setTextColor(16, 185, 129);
-        doc.text("Digital Signature:", 20, 85);
-        doc.setFontSize(6);
-        doc.setFont("courier");
-        doc.setTextColor(150, 150, 150);
-        const splitSig = doc.splitTextToSize(receiptData.signature, 170);
-        doc.text(splitSig, 20, 92);
+        // Signature Hidden from Visual PDF (Embedded in QR)
+        // doc.text("Digital Signature:", 20, 85);
+        // doc.text(splitSig, 20, 92);
         doc.setFont("helvetica");
         doc.addImage(receiptData.qrCodeUrl, 'PNG', 70, 140, 70, 70);
         doc.setTextColor(6, 182, 212);

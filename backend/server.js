@@ -33,8 +33,12 @@ app.use(cors());
 
 // --- Cryptographic Setup ---
 // 1. AES Setup for Card Encryption
+if (!process.env.JWT_SECRET) {
+    console.error("CRITICAL ERROR: JWT_SECRET is missing in .env. Cannot start secure server.");
+    process.exit(1);
+}
 const AES_ALGORITHM = 'aes-256-cbc';
-const AES_KEY = crypto.scryptSync(process.env.JWT_SECRET || 'secret', 'salt', 32); // Derived key
+const AES_KEY = crypto.scryptSync(process.env.JWT_SECRET, 'salt', 32); // Derived key
 // Note: In prod, use a proper stored secret 32-byte key.
 
 // 2. RSA Setup for Digital Signatures
@@ -184,6 +188,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
                 id: user._id,
                 role: user.role,
                 name: user.name,
+                email: user.email, // <--- Added Email to Token Payload
                 studentId: user.studentId
             }, process.env.JWT_SECRET);
 
@@ -294,6 +299,7 @@ const otpStore = {};
 app.post('/api/pay/initiate', authenticateToken, async (req, res) => {
     try {
         const { feeId, amount, cardNumber, cvv } = req.body;
+        console.log(`[PAYMENT INIT] User: ${req.user.name}, FeeID: ${feeId}, Amount: ${amount}`);
 
         // Rubric: Encryption - AES (Confidentiality)
         // CRITICAL: Encrypt card data before DB storage
@@ -303,17 +309,47 @@ app.post('/api/pay/initiate', authenticateToken, async (req, res) => {
         encryptedCard += cipher.final('hex');
 
         const fee = await Fee.findById(feeId);
+        if (!fee) {
+            console.error('[PAYMENT ERROR] Fee not found');
+            return res.status(404).json({ message: 'Fee record not found' });
+        }
 
-        const transaction = new Transaction({
+        // 1. Check if ALREADY PAID
+        const existingPaid = await Transaction.findOne({
             studentId: req.user.id,
-            feeId,
-            studentName: req.user.name,
-            feeTitle: fee.title,
-            amount,
-            encryptedCardData: encryptedCard,
-            iv: iv.toString('hex'),
+            feeId: feeId,
+            status: 'Completed'
+        });
+        if (existingPaid) {
+            return res.status(400).json({ message: 'Fee already paid.' });
+        }
+
+        // 2. Check for Existing PENDING ( Reuse/Update instead of duplicate )
+        let transaction = await Transaction.findOne({
+            studentId: req.user.id,
+            feeId: feeId,
             status: 'Pending'
         });
+
+        if (transaction) {
+            // Update existing attempt
+            transaction.amount = amount;
+            transaction.encryptedCardData = encryptedCard;
+            transaction.iv = iv.toString('hex');
+            // updated timestamp could be added here
+        } else {
+            // Create New
+            transaction = new Transaction({
+                studentId: req.user.id,
+                feeId,
+                studentName: req.user.name,
+                feeTitle: fee.title,
+                amount,
+                encryptedCardData: encryptedCard,
+                iv: iv.toString('hex'),
+                status: 'Pending'
+            });
+        }
         await transaction.save();
 
         // Rubric: MFA (Availability/Security)
@@ -332,6 +368,7 @@ app.post('/api/pay/initiate', authenticateToken, async (req, res) => {
 
         res.json({ transactionId: transaction._id, message: 'OTP Sent' });
     } catch (error) {
+        console.error('[PAYMENT CRASH]', error);
         res.status(500).json({ error: error.message });
     }
 });

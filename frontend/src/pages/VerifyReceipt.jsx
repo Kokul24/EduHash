@@ -66,27 +66,53 @@ const VerifyReceipt = () => {
                                     const qrDateRaw = parts[3];
                                     const qrTxId = parts[4];
 
-                                    if (!pageText.includes(qrName)) {
-                                        const msg = `⚠️ TAMPER DETECTED: Name mismatch! '${qrName}' not found.`;
+                                    // 1. Name Check (Strict Word Boundary)
+                                    // Escaping special regex chars in name just in case
+                                    const escapedName = qrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                    const nameRegex = new RegExp(`(?:^|[^a-zA-Z0-9])${escapedName}(?:$|[^a-zA-Z0-9])`, 'i');
+
+                                    // STRICT CHECK: Must match whole word logic (Regex)
+                                    // Previously .includes() allowed "Alex" inside "Alexander". 
+                                    if (!nameRegex.test(pageText)) {
+                                        const msg = `⚠️ TAMPER DETECTED: Name mismatch! '${qrName}' not found exactly.`;
                                         toast.error(msg);
                                         throw new Error(msg);
                                     }
+
                                     const cleanPageText = pageText.replace(/,/g, '');
-                                    const amountRegex = new RegExp(`${qrAmount}(?!\\d)`);
+                                    // 2. Amount Check (Strict)
+                                    // Look for: (Start of Line OR Non-Digit) + Amount + (End of Line OR Non-Digit)
+                                    const amountRegex = new RegExp(`(?:^|[^\\d])${qrAmount}(?!\\d)`);
                                     if (!amountRegex.test(cleanPageText)) {
                                         const msg = `⚠️ TAMPER DETECTED: Amount mismatch! Expected '${qrAmount}'.`;
                                         toast.error(msg);
                                         throw new Error(msg);
                                     }
+
+                                    // 3. Date & Time Check (Strict Full Match)
+                                    // Generate the exact string expected on PDF
                                     const formattedDate = new Date(qrDateRaw).toLocaleString();
-                                    if (!pageText.includes(formattedDate)) {
-                                        const justDate = new Date(qrDateRaw).toLocaleDateString();
-                                        if (!pageText.includes(justDate)) {
-                                            const msg = `⚠️ TAMPER DETECTED: Date mismatch!`;
-                                            toast.error(msg);
-                                            throw new Error(msg);
-                                        }
+
+                                    // Escape for Regex (dates have many special chars like / : ,)
+                                    const escapedFullDate = formattedDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+                                    // Regex: Boundary + DateString + Boundary
+                                    // Boundary can be start of line, space, non-digit/non-word char
+                                    const fullDateRegex = new RegExp(`(?:^|[^0-9/:\\-])${escapedFullDate}(?:$|[^0-9/:\\-])`);
+
+                                    // REMOVED LOOSE SHORT DATE CHECK:
+                                    // Previously, if the date matched (1/28/2026) but time was tampered (1:00 -> 2:00),
+                                    // the short date check would pass, bypassing the time verification.
+                                    // Now we enforce the FULL EXACT TIMESTAMP.
+
+                                    if (!fullDateRegex.test(pageText)) {
+                                        const msg = `⚠️ TAMPER DETECTED: Date/Time mismatch! Expected '${formattedDate}'.`;
+                                        toast.error(msg);
+                                        throw new Error(msg);
                                     }
+
+                                    // 4. Transaction ID Check (Strict boundary)
+                                    const txRegex = new RegExp(`(?:^|[^a-zA-Z0-9])${qrTxId}(?:$|[^a-zA-Z0-9])`);
                                     if (!pageText.includes(qrTxId)) {
                                         const msg = `⚠️ TAMPER DETECTED: Transaction ID mismatch!`;
                                         toast.error(msg);
@@ -299,7 +325,17 @@ const VerifyReceipt = () => {
                         onDragLeave={() => setIsDragging(false)}
                         className={`border-2 border-dashed rounded-xl p-12 transition-all duration-300 cursor-pointer relative ${isDragging ? 'border-cyan-400 bg-cyan-500/10' : 'border-cyan-500/30 hover:border-cyan-400/50 hover:bg-cyan-500/5'}`}
                     >
-                        <input type="file" accept="image/*,application/pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleFileChange(e.target.files[0])} />
+                        <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                    handleFileChange(e.target.files[0]);
+                                }
+                                e.target.value = ''; // Reset to allow re-selection of same file
+                            }}
+                        />
                         <div className="flex flex-col items-center gap-4 text-center pointer-events-none">
                             <motion.div animate={{ y: isDragging ? -10 : 0, scale: isDragging ? 1.1 : 1 }} transition={{ duration: 0.2 }} className="bg-cyan-500/10 p-6 rounded-2xl border border-cyan-500/30">
                                 <Upload size={48} className="text-cyan-400" />

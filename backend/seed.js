@@ -23,7 +23,14 @@ const seedDB = async () => {
 
         // 2. Hash Password
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash('NistSecurePassword@123', salt);
+
+        const adminPass = process.env.ADMIN_PASS;
+        if (!adminPass) {
+            console.error("❌ ADMIN_PASS is missing in .env");
+            process.exit(1);
+        }
+
+        const hashedPassword = await bcrypt.hash(adminPass, salt);
 
         // 3. Create ONLY the Admin User
         // Using +admin alias so emails go to eduhash23@gmail.com with a label
@@ -37,7 +44,7 @@ const seedDB = async () => {
 
         console.log('✅ Admin Account Created:');
         console.log(`   Email: ${adminUser.email}`);
-        console.log('   Pass:  NistSecurePassword@123');
+        console.log('   Pass:  [HIDDEN_IN_ENV]');
 
 
 
