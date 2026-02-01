@@ -8,7 +8,7 @@ import Register from './pages/Register';
 import StudentDashboard from './pages/StudentDashboard';
 import AuditorDashboard from './pages/AuditorDashboard';
 import VerifyReceipt from './pages/VerifyReceipt';
-import AdminDashboard from './pages/AdminDashboard'; // Basic one
+import AdminDashboard from './pages/AdminDashboard';
 
 const PrivateRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useContext(AuthContext);

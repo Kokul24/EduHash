@@ -2,9 +2,10 @@ import { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ShieldCheck, Lock, Fingerprint, Terminal, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Lock, Fingerprint, Terminal, Eye, EyeOff, Shield } from 'lucide-react';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
+import RBACMatrix from '../components/RBACMatrix';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -224,11 +225,21 @@ const Login = () => {
                             )}
                         </form>
 
-                        {!is2FA && (
-                            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }} className="mt-6 text-center text-cyan-400/50 text-sm font-mono">
-                                NO ACCOUNT? <Link to="/register" className="text-cyan-400 hover:text-cyan-300 transition-colors">REGISTER</Link>
-                            </motion.p>
-                        )}
+                        <div className="mt-8 flex flex-col items-center gap-4 border-t border-cyan-500/10 pt-4">
+                            {!is2FA && (
+                                <p className="text-center text-cyan-400/50 text-sm font-mono">
+                                    NO ACCOUNT? <span className="text-cyan-400">CONTACT ADMIN</span>
+                                </p>
+                            )}
+
+                            {/* Access Rights Matrix Link */}
+                            <RBACMatrix trigger={
+                                <button className="flex items-center gap-2 text-cyan-400/40 hover:text-cyan-400 text-xs font-mono transition-colors group">
+                                    <Shield size={12} />
+                                    <span className="underline underline-offset-4 decoration-cyan-500/30 group-hover:decoration-cyan-400">VIEW SYSTEM ACCESS RIGHTS</span>
+                                </button>
+                            } />
+                        </div>
                     </div>
                 </motion.div>
             </motion.div>

@@ -1,557 +1,105 @@
+/**
+ * EduHash Backend Server
+ * 
+ * A secure fee payment system with:
+ * - NIST 800-63B compliant password policies
+ * - AES-256 encryption for sensitive data
+ * - RSA digital signatures for receipts
+ * - 2FA via email OTP
+ * - Role-based access control (RBAC)
+ * 
+ * Directory Structure:
+ * - /config      - Configuration modules (DB, Email, Crypto)
+ * - /controllers - Business logic handlers
+ * - /middleware  - Authentication & authorization
+ * - /models      - MongoDB schemas
+ * - /routes      - API endpoint definitions
+ */
+
 require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
-const NodeRSA = require('node-rsa');
-const QRCode = require('qrcode');
-// const { PDFDocument } = require('pdf-lib'); // Removed unused dependency
-// Prompt: "Output: Use jspdf to download a PDF Receipt".
-// Usually PDF generation happens on frontend for "download", but can be backend.
-// Prompt says: "step 6... Output: Use jspdf". I will stick to frontend JS PDF generation if possible, BUT the signature creation happens on server.
-// So flow: Server returns { signature, qrCodeDataUrl }. Frontend puts this into PDF.
 
-// --- Email Transporter Configuration ---
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+// Import configurations
+const { connectDB } = require('./config/database');
+require('./config/crypto'); // Initialize crypto keys
 
-const User = require('./models/User');
-const Fee = require('./models/Fee');
-const Transaction = require('./models/Transaction');
+// Import middleware
+const { requestLogger } = require('./middleware');
 
+// Import routes
+const {
+    authRoutes,
+    adminRoutes,
+    feeRoutes,
+    paymentRoutes,
+    auditorRoutes
+} = require('./routes');
+
+// Import controllers for public route
+const { paymentController } = require('./controllers');
+
+// Initialize Express app
 const app = express();
+
+// --- Core Middleware ---
 app.use(express.json());
 app.use(cors());
+app.use(requestLogger);
 
-// --- Cryptographic Setup ---
-// 1. AES Setup for Card Encryption
-if (!process.env.JWT_SECRET) {
-    console.error("CRITICAL ERROR: JWT_SECRET is missing in .env. Cannot start secure server.");
-    process.exit(1);
-}
-const AES_ALGORITHM = 'aes-256-cbc';
-const AES_KEY = crypto.scryptSync(process.env.JWT_SECRET, 'salt', 32); // Derived key
-// Note: In prod, use a proper stored secret 32-byte key.
+// --- API Routes ---
+// Authentication routes (public)
+app.use('/api/auth', authRoutes);
 
-// 2. RSA Setup for Digital Signatures
-// Persist keys to avoid regeneration on restart
-const fs = require('fs');
-const path = require('path');
+// Admin routes (protected - admin only)
+app.use('/api/admin', adminRoutes);
 
-const KEYS_DIR = path.join(__dirname, 'keys');
-const PRIVATE_KEY_PATH = path.join(KEYS_DIR, 'private.pem');
-const PUBLIC_KEY_PATH = path.join(KEYS_DIR, 'public.pem');
+// Fee routes (protected - authenticated users)
+app.use('/api/fees', feeRoutes);
 
-let key;
-let PRIVATE_KEY;
-let PUBLIC_KEY;
+// Payment routes (protected - students)
+app.use('/api/pay', paymentRoutes);
 
-// Ensure keys directory exists
-if (!fs.existsSync(KEYS_DIR)) {
-    fs.mkdirSync(KEYS_DIR);
-}
+// Auditor routes (protected - auditors)
+app.use('/api/auditor', auditorRoutes);
 
-// Load or generate RSA keys
-if (fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(PUBLIC_KEY_PATH)) {
-    // Load existing keys
-    PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
-    PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
-    key = new NodeRSA();
-    key.importKey(PRIVATE_KEY, 'private');
-    console.log("RSA Keys Loaded from disk");
-} else {
-    // Generate new keys
-    key = new NodeRSA({ b: 512 }); // 512 bit for speed in demo, 2048 for prod
-    PRIVATE_KEY = key.exportKey('private');
-    PUBLIC_KEY = key.exportKey('public');
+// Public verification route (no auth required)
+app.post('/api/verify-receipt', paymentController.verifyReceipt);
 
-    // Save keys to disk
-    fs.writeFileSync(PRIVATE_KEY_PATH, PRIVATE_KEY);
-    fs.writeFileSync(PUBLIC_KEY_PATH, PUBLIC_KEY);
-    console.log("RSA Keys Generated and Saved to disk");
-}
-
-// --- Middleware ---
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`${req.method} ${req.originalUrl} - ${res.statusCode} [${duration}ms]`);
+// --- Health Check ---
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: '2.0.0'
     });
-    next();
 });
 
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.sendStatus(401);
+// --- Server Startup ---
+const PORT = process.env.PORT || 5000;
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
+const startServer = async () => {
+    const dbConnected = await connectDB();
+
+    if (dbConnected) {
+        app.listen(PORT, () => {
+            console.log(`
+╔═══════════════════════════════════════════════════╗
+║       🎓 EduHash Server v2.0 - Organized          ║
+╠═══════════════════════════════════════════════════╣
+║  🚀 Server running on port ${PORT}                   ║
+║  📁 Structure: config | controllers | middleware  ║
+║  🔐 NIST 800-63B Password Policy: 12+ chars       ║
+║  🔒 AES-256 Card Encryption                       ║
+║  ✍️  RSA Digital Signatures                        ║
+║  📧 2FA Email OTP                                 ║
+╚═══════════════════════════════════════════════════╝
+            `);
+        });
+    } else {
+        console.error('Failed to start server due to database connection issues.');
+        process.exit(1);
+    }
 };
 
-// --- Routes ---
-
-// 1. Auth & Registration
-app.post('/api/auth/register', async (req, res) => {
-    try {
-        const { name, email, password, role, studentId } = req.body;
-
-        // NIST Password Validation (Simplified: Length >= 12)
-        // NIST 800-63B recommends minimum length of 8, but 12 is safer.
-        // It also advises against complexity rules.
-        if (!password || password.length < 12) {
-            return res.status(400).json({ message: 'Password does not meet NIST guidelines (Min 12 characters)' });
-        }
-
-        // Rubric: Hashing (bcryptjs)
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const user = new User({ name, email, password: hashedPassword, role, studentId });
-        await user.save();
-        res.status(201).json({ message: 'User registered' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ message: 'User not found' });
-
-        if (await bcrypt.compare(password, user.password)) {
-            // CREDENTIALS VALID - INITIATE 2FA
-
-            // Generate 6 digit OTP
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-            // Save to User Model (Expires in 5 mins)
-            user.otp = otp;
-            user.otpExpires = Date.now() + 5 * 60 * 1000;
-            await user.save();
-
-            // Send Email with OTP
-            const mailOptions = {
-                from: process.env.EMAIL_USER,
-                to: user.email,
-                subject: 'EduHash Security Verification Code',
-                text: `Your One-Time Password (OTP) for login is: ${otp}\n\nThis code expires in 5 minutes.\nIf you did not request this, please ignore.`
-            };
-
-            await transporter.sendMail(mailOptions);
-            console.log(`[AUTH 2FA] OTP sent to: ${user.email}`); // Keep log for debug but don't show code
-
-            res.json({
-                requireOtp: true,
-                message: 'Credentials valid. Please enter the OTP sent to your email.',
-                email: user.email // Send back to confirm where it went
-            });
-        } else {
-            res.status(401).json({ message: 'Invalid credentials' });
-        }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/auth/verify-otp', async (req, res) => {
-    try {
-        const { email, otp } = req.body;
-        const user = await User.findOne({ email });
-
-        if (!user) return res.status(400).json({ message: 'User not found' });
-
-        // Check if OTP matches and is not expired
-        if (user.otp === otp && user.otpExpires > Date.now()) {
-
-            // CLEAR OTP after use
-            user.otp = undefined;
-            user.otpExpires = undefined;
-            await user.save();
-
-            // ISSUE TOKEN
-            const token = jwt.sign({
-                id: user._id,
-                role: user.role,
-                name: user.name,
-                email: user.email, // <--- Added Email to Token Payload
-                studentId: user.studentId
-            }, process.env.JWT_SECRET);
-
-            res.json({
-                token,
-                role: user.role,
-                name: user.name,
-                id: user._id,
-                studentId: user.studentId
-            });
-
-        } else {
-            res.status(400).json({ message: 'Invalid or Expired OTP' });
-        }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Admin Route: Create Auditor
-app.post('/api/admin/create-auditor', authenticateToken, async (req, res) => {
-    // 1. Authorization Check
-    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied: Admins only' });
-
-    try {
-        const { name, email } = req.body;
-
-        // 2. Check overlap
-        const existing = await User.findOne({ email });
-        if (existing) return res.status(400).json({ message: 'User already exists with this email' });
-
-        // 3. Generate Strong Password
-        const generatedPassword = crypto.randomBytes(8).toString('hex') + '!Aa1'; // e.g. "a3f5b2c1!Aa1"
-
-        // 4. Hash & Save
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(generatedPassword, salt);
-
-        const newAuditor = new User({
-            name,
-            email,
-            password: hashedPassword,
-            role: 'auditor'
-        });
-        await newAuditor.save();
-
-        // 5. Email Credentials
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'EduHash Auditor Access Credentials',
-            text: `Welcome to EduHash Audit Team.\n\nYour account has been created by the Administrator.\n\nLogin Credentials:\nEmail: ${email}\nPassword: ${generatedPassword}\n\nPlease login and change your password immediately.`
-        };
-
-        await transporter.sendMail(mailOptions);
-        console.log(`[ADMIN] Created Auditor: ${email} | Sent credentials via email`);
-
-        res.status(201).json({ message: `Auditor ${name} created and credentials sent to ${email}` });
-
-    } catch (error) {
-        console.error("Create Auditor Error:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 2. Fees (Admin Create, Student Read)
-app.get('/api/fees', authenticateToken, async (req, res) => {
-    try {
-        // Both Students and Admins can see fees.
-        const fees = await Fee.find();
-
-        // If student, check which are paid
-        let feesWithStatus = [];
-        if (req.user.role === 'student') {
-            // Find transactions for this student
-            const transactions = await Transaction.find({ studentId: req.user.id, status: 'Completed' });
-            const paidFeeIds = transactions.map(t => t.feeId.toString());
-
-            feesWithStatus = fees.map(f => ({
-                ...f.toObject(),
-                status: paidFeeIds.includes(f._id.toString()) ? 'Paid' : 'Pending'
-            }));
-        } else {
-            feesWithStatus = fees.map(f => ({ ...f.toObject(), status: 'N/A' }));
-        }
-
-        res.json(feesWithStatus);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/fees', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
-    try {
-        const fee = new Fee(req.body);
-        await fee.save();
-        res.status(201).json(fee);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 3. Payment Flow
-// In-memory OTP store for demo (use Redis in prod)
-const otpStore = {};
-
-app.post('/api/pay/initiate', authenticateToken, async (req, res) => {
-    try {
-        const { feeId, amount, cardNumber, cvv } = req.body;
-        console.log(`[PAYMENT INIT] User: ${req.user.name}, FeeID: ${feeId}, Amount: ${amount}`);
-
-        // Rubric: Encryption - AES (Confidentiality)
-        // CRITICAL: Encrypt card data before DB storage
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv(AES_ALGORITHM, AES_KEY, iv);
-        let encryptedCard = cipher.update(cardNumber + ':' + cvv, 'utf8', 'hex');
-        encryptedCard += cipher.final('hex');
-
-        const fee = await Fee.findById(feeId);
-        if (!fee) {
-            console.error('[PAYMENT ERROR] Fee not found');
-            return res.status(404).json({ message: 'Fee record not found' });
-        }
-
-        // 1. Check if ALREADY PAID
-        const existingPaid = await Transaction.findOne({
-            studentId: req.user.id,
-            feeId: feeId,
-            status: 'Completed'
-        });
-        if (existingPaid) {
-            return res.status(400).json({ message: 'Fee already paid.' });
-        }
-
-        // 2. Check for Existing PENDING ( Reuse/Update instead of duplicate )
-        let transaction = await Transaction.findOne({
-            studentId: req.user.id,
-            feeId: feeId,
-            status: 'Pending'
-        });
-
-        if (transaction) {
-            // Update existing attempt
-            transaction.amount = amount;
-            transaction.encryptedCardData = encryptedCard;
-            transaction.iv = iv.toString('hex');
-            // updated timestamp could be added here
-        } else {
-            // Create New
-            transaction = new Transaction({
-                studentId: req.user.id,
-                feeId,
-                studentName: req.user.name,
-                feeTitle: fee.title,
-                amount,
-                encryptedCardData: encryptedCard,
-                iv: iv.toString('hex'),
-                status: 'Pending'
-            });
-        }
-        await transaction.save();
-
-        // Rubric: MFA (Availability/Security)
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        otpStore[transaction._id] = otp;
-
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: req.user.email,
-            subject: 'EduHash Payment Verification Code',
-            text: `Your One-Time Password (OTP) for payment confirmation is: ${otp}\n\nAmount: Rs. ${amount}\n\nThis code is valid for this transaction only.`
-        };
-
-        await transporter.sendMail(mailOptions);
-        console.log(`[PAYMENT OTP] Sent to: ${req.user.email}`);
-
-        res.json({ transactionId: transaction._id, message: 'OTP Sent' });
-    } catch (error) {
-        console.error('[PAYMENT CRASH]', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/pay/verify', authenticateToken, async (req, res) => {
-    try {
-        const { transactionId, otp } = req.body;
-
-        if (otpStore[transactionId] !== otp) {
-            return res.status(400).json({ message: 'Invalid OTP' });
-        }
-
-        // OTP Correct - Finalize Transaction
-        const transaction = await Transaction.findById(transactionId);
-        transaction.status = 'Completed';
-
-        // Rubric: Receipt Generation (Integrity)
-        // Data String: Include ALL critical fields - StudentID|StudentName|Amount|Date|TransactionID
-        const dataString = `${transaction.studentId}|${transaction.studentName}|${transaction.amount}|${transaction.date}|${transaction._id}`;
-
-        // Hashing: SHA-256
-        const hash = crypto.createHash('sha256').update(dataString).digest('hex');
-        transaction.receiptHash = hash;
-
-        // Signing: RSA Private Key
-        // key.sign(data, [encoding], [source_encoding])
-        const signature = key.sign(hash, 'base64', 'utf8');
-        transaction.digitalSignature = signature;
-
-        await transaction.save();
-        delete otpStore[transactionId]; // Cleanup
-
-        // Generate QR Code data URL containing the signature
-        // The QR contains just the signature. The verifier needs to reconstruct the hash and verify.
-        // OR the QR contains the JSON { signature, dataString }? 
-        // Prompt: "Scan the QR Code to extract the Digital Signature."
-        const qrCodeUrl = await QRCode.toDataURL(JSON.stringify({
-            sig: signature,
-            data: dataString
-        }));
-
-        res.json({
-            message: 'Payment Successful',
-            receipt: {
-                transactionId: transaction._id,
-                studentName: transaction.studentName,
-                amount: transaction.amount,
-                date: transaction.date,
-                signature: signature,
-                hash: hash,
-                qrCodeUrl: qrCodeUrl
-            }
-        });
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 4. Auditor Dashboard Data
-app.get('/api/auditor/stats', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'auditor') return res.sendStatus(403);
-
-    try {
-        const transactions = await Transaction.find().sort({ date: -1 });
-        // Mocking some data aggregation
-        const paidCount = transactions.filter(t => t.status === 'Completed').length;
-        const pendingCount = transactions.filter(t => t.status === 'Pending').length;
-
-        const fees = await Fee.find();
-        const revenueByCategory = {};
-        transactions.forEach(t => {
-            if (t.status === 'Completed') {
-                // Find fee category
-                const fee = fees.find(f => f._id.equals(t.feeId));
-                const cat = fee ? fee.category : 'Misc';
-                revenueByCategory[cat] = (revenueByCategory[cat] || 0) + t.amount;
-            }
-        });
-
-        const revenueData = Object.keys(revenueByCategory).map(key => ({
-            name: key,
-            value: revenueByCategory[key]
-        }));
-
-        const statusData = [
-            { name: 'Paid', value: paidCount },
-            { name: 'Pending', value: pendingCount }
-        ];
-
-        res.json({ transactions, statusData, revenueData });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 5. Public Verification Route
-// The client will send the QR content (Signature + Data).
-// In a real scenario, the client app would verify using the PUBLIC KEY locally or via this API.
-// "Decryption: Use the Server's Public Key to decrypt the signature"
-app.post('/api/verify-receipt', async (req, res) => {
-    try {
-        const { signature, originalData } = req.body;
-
-        console.log('=== VERIFICATION REQUEST ===');
-        console.log('Received originalData:', originalData);
-        console.log('Received signature:', signature);
-
-        // Re-calculate Hash
-        const calculatedHash = crypto.createHash('sha256').update(originalData).digest('hex');
-        console.log('Calculated Hash:', calculatedHash);
-
-        // Verify the signature
-        const isVerified = key.verify(calculatedHash, signature, 'utf8', 'base64');
-        console.log('Verification Result:', isVerified);
-
-        if (isVerified) {
-            // Parse the verified data to show what was authenticated
-            let verifiedData = {};
-
-            if (originalData.includes('|')) {
-                // V2 Format (Secure Tamper Proof)
-                const parts = originalData.split('|');
-                verifiedData = {
-                    studentId: parts[0],
-                    studentName: parts[1],
-                    amount: parts[2],
-                    date: parts[3],
-                    transactionId: parts[4],
-                    version: 'v2'
-                };
-            } else {
-                // Legacy Format (Backward Compatibility)
-                const parts = originalData.split('-');
-                verifiedData = {
-                    studentId: parts[0],
-                    amount: parts[1],
-                    transactionId: parts[parts.length - 1],
-                    studentName: "(Legacy Receipt)",
-                    date: "Legacy Date",
-                    version: 'v1'
-                };
-            }
-
-            res.json({
-                valid: true,
-                message: '✅ Verified Authentic - Trusted Source',
-                verifiedData: verifiedData,
-                note: verifiedData.version === 'v2'
-                    ? 'Full cryptographic verification active.'
-                    : 'Legacy receipt verified (limited detail).'
-            });
-        } else {
-            res.json({ valid: false, message: '❌ Tampered / Invalid Receipt' });
-        }
-    } catch (error) {
-        console.error('Verification Error:', error);
-        res.json({ valid: false, message: '❌ Verification Failed: ' + error.message });
-    }
-});
-
-// 6. Key Exchange / Distribution Endpoint (Rubric Component 3)
-// Allows external verifiers to fetch the Public Key to verify signatures locally.
-app.get('/api/auth/public-key', (req, res) => {
-    res.json({
-        algorithm: 'RSA',
-        format: 'PEM',
-        publicKey: PUBLIC_KEY
-    });
-});
-
-// Start Server
-mongoose.connect(process.env.MONGO_URI, {
-    serverSelectionTimeoutMS: 5000,
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    family: 4 // Force IPv4, helps with some DNS issues
-})
-    .then(() => {
-        console.log('MongoDB Connected');
-        app.listen(process.env.PORT, () => console.log(`Server running on port ${process.env.PORT}`));
-    })
-    .catch(err => {
-        console.error("MongoDB Connection Failed:", err.message);
-        console.log("Tip: Check your IP Whitelist or try using a phone hotspot to rule out ISP blocking.");
-    });
+startServer();

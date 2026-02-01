@@ -46,8 +46,32 @@ const seedDB = async () => {
         console.log(`   Email: ${adminUser.email}`);
         console.log('   Pass:  [HIDDEN_IN_ENV]');
 
+        // 4. Create Student Accounts
+        const studentPassword = 'NistSecure@Pass'; // 14 characters - NIST compliant (12+ chars)
+        const hashedStudentPass = await bcrypt.hash(studentPassword, salt);
 
+        const student1 = await User.create({
+            name: 'Bob',
+            email: 'eduhash23+bob@gmail.com',
+            password: hashedStudentPass,
+            role: 'student',
+            studentId: 'MEC23721',
+            is2FAEnabled: true
+        });
 
+        const student2 = await User.create({
+            name: 'Ben',
+            email: 'eduhash23+ben@gmail.com',
+            password: hashedStudentPass,
+            role: 'student',
+            studentId: 'CYS23431',
+            is2FAEnabled: true
+        });
+
+        console.log('✅ Student Accounts Created:');
+        console.log(`   1. ${student1.name} (${student1.studentId}) - ${student1.email}`);
+        console.log(`   2. ${student2.name} (${student2.studentId}) - ${student2.email}`);
+        console.log('   Pass: NistSecure@Pass (14 chars - NIST compliant)');
 
         process.exit();
     } catch (err) {
